@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Chess Coach</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="masthead">
+        <div class="mini-board" aria-hidden="true"></div>
+        <div>
+          <p class="eyebrow">Chess Coach <span id="version"></span></p>
+          <h1 id="page-title" tabindex="-1">Practice</h1>
+          <p id="page-lede" class="lede">
+            Play a full game against the engine at your level. Ask your coach for a hint when you're
+            stuck. Your game is saved as you play, and when it ends the coach can review it with
+            you. Finished games stay under Past games, ready to replay.
+          </p>
+        </div>
+      </header>
+
+      <p id="coach-paused-live" class="sr-only" role="status"></p>
+      <div id="coach-paused" class="coach-paused" hidden>
+        <p>
+          You've reached your Claude usage limit, so the coach is paused. Keep playing: hints,
+          comments and reviews come from the engine until you try the coach again.
+        </p>
+        <button id="coach-resume" type="button" class="secondary">Try the coach again</button>
+      </div>
+
+      <nav class="screens" aria-label="Screens">
+        <button id="screen-practice" type="button" aria-pressed="true">Practice</button>
+        <button id="screen-lessons" type="button" aria-pressed="false">Lessons</button>
+      </nav>
+
+      <div id="practice-screen">
+        <section class="engine practice" aria-labelledby="practice-heading">
+          <div class="engine-head">
+            <h2 id="practice-heading">Your game</h2>
+            <p id="practice-save" class="status" data-tone="info"></p>
+          </div>
+          <form id="practice-setup" class="practice-setup">
+            <label for="practice-level">Engine level</label>
+            <select id="practice-level"></select>
+            <p id="practice-level-blurb" class="status"></p>
+            <fieldset class="modes">
+              <legend>You play</legend>
+              <label
+                ><input type="radio" name="practice-color" value="white" checked /> White</label
+              >
+              <label><input type="radio" name="practice-color" value="black" /> Black</label>
+              <label><input type="radio" name="practice-color" value="random" /> Random</label>
+            </fieldset>
+            <fieldset class="modes">
+              <legend>Hints</legend>
+              <label
+                ><input type="radio" name="practice-hint-mode" value="tell" checked /> Tell
+                me</label
+              >
+              <label><input type="radio" name="practice-hint-mode" value="ask" /> Ask me</label>
+            </fieldset>
+            <div class="actions">
+              <button id="practice-start" type="submit">Start game</button>
+            </div>
+          </form>
+          <div id="practice-play" class="practice-play" hidden>
+            <p id="practice-info" class="status"></p>
+            <p
+              id="practice-status"
+              class="status practice-status"
+              role="status"
+              data-tone="info"
+            ></p>
+            <div class="board-wrap">
+              <div
+                id="practice-board"
+                class="board"
+                tabindex="-1"
+                role="group"
+                aria-label="Practice board"
+              ></div>
+              <div
+                id="practice-promotion"
+                class="promotion"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Promotion"
+                hidden
+              ></div>
+            </div>
+            <div class="actions">
+              <button id="practice-retry" type="button" hidden>Try again</button>
+              <button id="practice-takeback" type="button" class="secondary">Take back</button>
+              <button id="practice-resign" type="button" class="secondary">Resign</button>
+              <button id="practice-new" type="button" class="secondary">New game</button>
+              <button id="practice-flip" type="button" class="secondary">Flip board</button>
+            </div>
+            <section class="answer-card hints" aria-labelledby="hint-heading">
+              <h3 id="hint-heading">Coach</h3>
+              <fieldset id="hint-mode" class="modes" disabled aria-describedby="hint-mode-note">
+                <legend>Hints</legend>
+                <label><input type="radio" name="hint-mode" value="tell" checked /> Tell me</label>
+                <label><input type="radio" name="hint-mode" value="ask" /> Ask me</label>
+                <span id="hint-mode-note" class="mode-note">Chosen for this game.</span>
+              </fieldset>
+              <div class="actions">
+                <button id="hint-next" type="button" disabled>Hint: the plan</button>
+                <button id="hint-another" type="button" class="secondary" hidden>
+                  Another question
+                </button>
+                <button id="hint-stop" type="button" class="secondary" hidden>Stop</button>
+              </div>
+              <p id="hint-status" class="status" role="status" data-tone="info"></p>
+              <ol id="hint-log" class="hint-log" aria-live="polite"></ol>
+              <div class="commentary">
+                <label class="switch"
+                  ><input id="commentary-toggle" type="checkbox" /> Comment on each of my
+                  moves</label
+                >
+                <p id="commentary-status" class="status" role="status"></p>
+                <ol id="commentary-log" class="hint-log comment-log" aria-live="polite" hidden></ol>
+              </div>
+              <div class="voice-talk">
+                <form id="voice-form" class="lesson-ask-form">
+                  <label for="voice-input">Talk to the coach</label>
+                  <div class="lesson-ask-row">
+                    <input
+                      id="voice-input"
+                      type="text"
+                      maxlength="200"
+                      autocomplete="off"
+                      enterkeyhint="send"
+                      placeholder="Say: hint, review, play e4, or ask anything"
+                    />
+                    <button
+                      id="voice-mic"
+                      type="button"
+                      class="secondary"
+                      aria-pressed="false"
+                      hidden
+                    >
+                      Speak
+                    </button>
+                    <button id="voice-send" type="submit">Send</button>
+                  </div>
+                  <span id="voice-mic-note" class="mode-note" hidden
+                    >Press Speak and say what you want, then check the words and press Send. The
+                    microphone listens only while it is on, and your browser may send what you say
+                    to its own speech service.</span
+                  >
+                  <span id="voice-keyboard-note" class="mode-note"
+                    >To speak, tap the microphone key on your keyboard: your device turns your voice
+                    into text here. Nothing listens until you do.</span
+                  >
+                </form>
+                <label id="voice-chat-label" class="switch" hidden
+                  ><input id="voice-chat-toggle" type="checkbox" /> Voice chat: talk without
+                  pressing anything</label
+                >
+                <p id="voice-chat-state" class="status" role="status" hidden></p>
+                <div id="voice-confirm" class="voice-confirm" hidden>
+                  <p id="voice-confirm-text"></p>
+                  <div class="actions">
+                    <button id="voice-yes" type="button">Play it</button>
+                    <button id="voice-no" type="button" class="secondary">Cancel</button>
+                  </div>
+                </div>
+                <p id="voice-status" class="status" role="status" data-tone="info"></p>
+                <p id="voice-support" class="mode-note" hidden></p>
+                <div id="voice-answer" class="lesson-answer" aria-live="polite" hidden>
+                  <p id="voice-answer-q" class="lesson-answer-q"></p>
+                  <p id="voice-answer-text"></p>
+                </div>
+              </div>
+              <div class="read-aloud">
+                <label id="read-aloud-label" class="switch" hidden
+                  ><input id="read-aloud-toggle" type="checkbox" /> Read aloud</label
+                >
+                <button id="read-aloud-stop" type="button" class="secondary" hidden>
+                  Stop reading
+                </button>
+                <p id="read-aloud-note" class="status" hidden></p>
+              </div>
+            </section>
+            <section
+              id="review"
+              class="answer-card review"
+              aria-labelledby="review-heading"
+              tabindex="-1"
+              hidden
+            >
+              <h3 id="review-heading">Game review</h3>
+              <div class="actions">
+                <button id="review-start" class="review-start" type="button">
+                  Review this game
+                </button>
+                <button id="review-stop" type="button" class="secondary review-stop" hidden>
+                  Stop
+                </button>
+              </div>
+              <p id="review-status" class="status review-status" role="status" data-tone="info"></p>
+              <p id="review-summary" class="review-summary"></p>
+              <ol id="review-points" class="review-points"></ol>
+              <div id="review-lesson" class="review-lesson" hidden>
+                <h4>Lesson</h4>
+                <p id="review-lesson-text" class="review-lesson-text"></p>
+              </div>
+            </section>
+            <p id="practice-opening" class="practice-opening" hidden></p>
+            <p id="practice-moves" class="notation readout" data-count="0">(no moves yet)</p>
+          </div>
+        </section>
+
+        <section id="history" class="engine history" aria-labelledby="history-heading" hidden>
+          <div class="engine-head">
+            <h2 id="history-heading">Past games</h2>
+            <p id="history-status" class="status" role="status" data-tone="info"></p>
+          </div>
+          <ol id="history-list" class="history-list"></ol>
+          <div id="history-view" class="history-view" tabindex="-1" hidden>
+            <div class="actions">
+              <button id="history-back" type="button" class="secondary">Back to past games</button>
+            </div>
+            <h3 id="history-title"></h3>
+            <p id="history-info" class="status"></p>
+            <div class="board-wrap">
+              <div
+                id="history-board"
+                class="board"
+                role="img"
+                aria-label="The saved game's board"
+              ></div>
+            </div>
+            <p id="history-ply" class="status" role="status"></p>
+            <div class="actions history-steps">
+              <button
+                id="history-first"
+                type="button"
+                class="secondary"
+                aria-label="Start position"
+              >
+                |&lt;
+              </button>
+              <button id="history-prev" type="button" class="secondary" aria-label="Previous move">
+                &lt;
+              </button>
+              <button id="history-next" type="button" class="secondary" aria-label="Next move">
+                &gt;
+              </button>
+              <button id="history-last" type="button" class="secondary" aria-label="Final position">
+                &gt;|
+              </button>
+            </div>
+            <p id="history-moves" class="notation readout"></p>
+            <p id="history-hints" class="status"></p>
+            <section
+              id="history-review"
+              class="answer-card review"
+              aria-labelledby="history-review-heading"
+              tabindex="-1"
+              hidden
+            >
+              <h3 id="history-review-heading">Game review</h3>
+              <div class="actions">
+                <button class="review-start" type="button">Review this game</button>
+                <button type="button" class="secondary review-stop" hidden>Stop</button>
+              </div>
+              <p class="status review-status" role="status" data-tone="info"></p>
+              <p class="review-summary"></p>
+              <ol class="review-points"></ol>
+              <div class="review-lesson" hidden>
+                <h4>Lesson</h4>
+                <p class="review-lesson-text"></p>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
+
+      <div id="lessons-screen" hidden>
+        <section class="engine lessons" aria-labelledby="lessons-heading">
+          <div class="engine-head">
+            <h2 id="lessons-heading">Lessons</h2>
+            <p id="lesson-save" class="status" data-tone="info"></p>
+          </div>
+          <div id="lesson-list" class="lesson-list"></div>
+          <div id="lesson-play" class="lesson-play" hidden>
+            <p id="lesson-where" class="status"></p>
+            <h3 id="lesson-title" class="lesson-title"></h3>
+            <p id="lesson-text" class="lesson-text" aria-live="polite"></p>
+            <div id="lesson-banner" class="lesson-banner" role="alert" hidden>
+              <p id="lesson-banner-text"></p>
+              <div class="actions">
+                <button id="lesson-try" type="button">Try again</button>
+                <button id="lesson-why" type="button" class="secondary">Why?</button>
+                <button id="lesson-anyway" type="button" class="secondary">Play it anyway</button>
+              </div>
+              <p id="lesson-why-text" class="lesson-why" hidden></p>
+            </div>
+            <div class="board-wrap">
+              <div
+                id="lesson-board"
+                class="board"
+                tabindex="-1"
+                role="group"
+                aria-label="Lesson board"
+              ></div>
+              <div
+                id="lesson-promotion"
+                class="promotion"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Promotion"
+                hidden
+              ></div>
+            </div>
+            <div class="actions">
+              <button id="lesson-back" type="button" class="secondary">Back</button>
+              <button id="lesson-next" type="button">Next</button>
+              <button id="lesson-skip" type="button" class="secondary" hidden>Skip</button>
+              <button id="lesson-leave" type="button" class="secondary">Leave lesson</button>
+            </div>
+            <div class="read-aloud">
+              <label id="lesson-read-aloud-label" class="switch" hidden
+                ><input id="lesson-read-aloud-toggle" type="checkbox" /> Read aloud</label
+              >
+              <button id="lesson-read-aloud-stop" type="button" class="secondary" hidden>
+                Stop reading
+              </button>
+              <p id="lesson-read-aloud-note" class="status" hidden></p>
+            </div>
+            <section
+              id="lesson-ask"
+              class="answer-card lesson-ask"
+              aria-labelledby="lesson-ask-heading"
+            >
+              <h3 id="lesson-ask-heading">Ask the coach</h3>
+              <div id="lesson-questions" class="actions lesson-questions"></div>
+              <div class="voice-talk">
+                <form id="lesson-voice-form" class="lesson-ask-form">
+                  <label for="lesson-voice-input">Talk to the coach</label>
+                  <div class="lesson-ask-row">
+                    <input
+                      id="lesson-voice-input"
+                      type="text"
+                      maxlength="200"
+                      autocomplete="off"
+                      enterkeyhint="send"
+                      placeholder="Ask, or say: next, hint, play e4"
+                    />
+                    <button
+                      id="lesson-voice-mic"
+                      type="button"
+                      class="secondary"
+                      aria-pressed="false"
+                      hidden
+                    >
+                      Speak
+                    </button>
+                    <button id="lesson-voice-send" type="submit">Send</button>
+                  </div>
+                  <span id="lesson-voice-mic-note" class="mode-note" hidden
+                    >Press Speak and say what you want, then check the words and press Send. The
+                    microphone listens only while it is on, and your browser may send what you say
+                    to its own speech service.</span
+                  >
+                  <span id="lesson-voice-keyboard-note" class="mode-note"
+                    >To speak, tap the microphone key on your keyboard: your device turns your voice
+                    into text here. Nothing listens until you do.</span
+                  >
+                </form>
+                <label id="lesson-voice-chat-label" class="switch" hidden
+                  ><input id="lesson-voice-chat-toggle" type="checkbox" /> Voice chat: talk without
+                  pressing anything</label
+                >
+                <p id="lesson-voice-chat-state" class="status" role="status" hidden></p>
+                <div id="lesson-voice-confirm" class="voice-confirm" hidden>
+                  <p id="lesson-voice-confirm-text"></p>
+                  <div class="actions">
+                    <button id="lesson-voice-yes" type="button">Play it</button>
+                    <button id="lesson-voice-no" type="button" class="secondary">Cancel</button>
+                  </div>
+                </div>
+                <p id="lesson-voice-status" class="status" role="status" data-tone="info"></p>
+              </div>
+              <div id="lesson-reword-row" class="actions">
+                <button id="lesson-reword" type="button" class="secondary">
+                  Explain differently
+                </button>
+              </div>
+              <div aria-live="polite">
+                <div id="lesson-answer" class="lesson-answer" hidden>
+                  <p id="lesson-answer-q" class="lesson-answer-q"></p>
+                  <p id="lesson-answer-note" class="lesson-answer-note" hidden></p>
+                  <p id="lesson-answer-a"></p>
+                  <div id="lesson-answer-actions" class="actions" hidden>
+                    <button id="lesson-answer-show" type="button" class="secondary">
+                      Show that answer
+                    </button>
+                    <button id="lesson-answer-coach" type="button" class="secondary">
+                      Ask the coach anyway
+                    </button>
+                  </div>
+                  <div id="lesson-vote" class="lesson-vote" hidden>
+                    <button
+                      id="lesson-vote-up"
+                      type="button"
+                      class="secondary"
+                      aria-label="Good answer"
+                      aria-pressed="false"
+                    >
+                      👍
+                    </button>
+                    <button
+                      id="lesson-vote-down"
+                      type="button"
+                      class="secondary"
+                      aria-label="Bad answer: don't show it again"
+                      aria-pressed="false"
+                    >
+                      👎
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p id="lesson-answer-count" class="status" hidden></p>
+            </section>
+            <section
+              id="lesson-coach"
+              class="answer-card hints"
+              aria-labelledby="lesson-coach-heading"
+              hidden
+            >
+              <h3 id="lesson-coach-heading">Coach</h3>
+              <fieldset id="lesson-hint-mode" class="modes">
+                <legend>Hints</legend>
+                <label
+                  ><input type="radio" name="lesson-hint-mode" value="tell" checked /> Tell
+                  me</label
+                >
+                <label><input type="radio" name="lesson-hint-mode" value="ask" /> Ask me</label>
+              </fieldset>
+              <div class="actions">
+                <button id="lesson-hint" type="button">Hint: the plan</button>
+                <button id="lesson-hint-another" type="button" class="secondary" hidden>
+                  Another question
+                </button>
+              </div>
+              <p id="lesson-hint-status" class="status" role="status" data-tone="info"></p>
+              <ol id="lesson-hint-log" class="hint-log" aria-live="polite"></ol>
+              <div class="commentary">
+                <label class="switch"
+                  ><input id="lesson-commentary" type="checkbox" /> Comment on each of my
+                  moves</label
+                >
+                <ol
+                  id="lesson-comment-log"
+                  class="hint-log comment-log"
+                  aria-live="polite"
+                  hidden
+                ></ol>
+              </div>
+            </section>
+          </div>
+          <div id="lesson-end" class="answer-card lesson-end" hidden>
+            <h3 id="lesson-end-title"></h3>
+            <p id="lesson-takeaway" class="lesson-takeaway"></p>
+            <p id="lesson-score"></p>
+            <div class="actions">
+              <button id="lesson-again" type="button">Do it again</button>
+              <button id="lesson-done" type="button" class="secondary">Back to lessons</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <section id="data-export" class="engine data-export" aria-labelledby="data-export-heading">
+        <div class="engine-head">
+          <h2 id="data-export-heading">Your data</h2>
+          <p id="data-export-status" class="status" role="status" data-tone="info"></p>
+        </div>
+        <p class="status">
+          Save your games, past games, lesson progress and saved coach answers as one file. Keep it
+          as a backup; the Bring in your data box restores it.
+        </p>
+        <div class="actions">
+          <button id="data-export-button" type="button">Export my data</button>
+        </div>
+      </section>
+
+      <section
+        id="data-import"
+        class="engine data-export"
+        aria-labelledby="data-import-heading"
+        hidden
+      >
+        <div class="engine-head">
+          <h2 id="data-import-heading">Bring in your data</h2>
+          <p id="data-import-status" class="status" role="status" data-tone="info"></p>
+        </div>
+        <p class="status">
+          Pick a file saved by Export my data. Anything already in this account is kept, so it is
+          safe to import the same file twice.
+        </p>
+        <div class="actions">
+          <input id="data-import-file" type="file" accept=".json,application/json" />
+          <button id="data-import-go" type="button" hidden>Import</button>
+          <button id="data-import-reload" type="button" hidden>Reload to see it</button>
+        </div>
+      </section>
+
+      <section class="engine data-export" aria-labelledby="diagnostics-heading">
+        <div class="engine-head">
+          <h2 id="diagnostics-heading">Coach diagnostics</h2>
+        </div>
+        <label class="switch">
+          <input id="diagnostics-toggle" type="checkbox" />
+          Show coach diagnostics
+        </label>
+        <p class="status">
+          For checking the coach: shows why a hint was held back and how many answers were reused or
+          sent to the coach. Off by default.
+        </p>
+      </section>
+
+      <footer class="foot">
+        <span class="notation">1. e4 e5 2. Nf3</span>
+        <span>
+          Engine facts first, coaching second. Engine:
+          <a href="https://github.com/nmrugg/stockfish.js" target="_blank" rel="noopener"
+            >Stockfish</a
+          >
+          (GPL-3.0). Board:
+          <a href="https://github.com/lichess-org/chessground" target="_blank" rel="noopener"
+            >chessground</a
+          >
+          by lichess.org (GPL-3.0). Pieces: cburnett by Colin M.L. Burnett. Opening names:
+          <a href="https://github.com/lichess-org/chess-openings" target="_blank" rel="noopener"
+            >lichess.org</a
+          >
+          (CC0). Lesson puzzles:
+          <a href="https://database.lichess.org/#puzzles" target="_blank" rel="noopener"
+            >lichess puzzle database</a
+          >
+          (CC0). Source code:
+          <a
+            id="source-link"
+            href="https://github.com/ildruido/chess-coach-app"
+            target="_blank"
+            rel="noopener"
+            >GPL-3.0 on GitHub</a
+          >.
+        </span>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

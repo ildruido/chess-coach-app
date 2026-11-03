@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+dist
+dist-lab
+dist-web
+.git
+e2e
+tests
+docs
+test-results
+playwright-report
+.claude

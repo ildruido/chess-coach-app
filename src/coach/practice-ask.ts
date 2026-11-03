@@ -1,0 +1,65 @@
+// A spoken or typed question about the practice game (CC-033). Same rules as a
+// lesson question: the engine supplies every fact, the best move stays secret
+// (a question is not a hint), and the answer is fact-checked before it is
+// shown or read aloud. Pure logic, unit tested.
+import { gameAt } from "../chess/notation";
+import { factCheck, hiddenFactsText, type EngineFacts } from "./hint";
+import type { NamedMove } from "../lessons/ask";
+import { tidyQuestion } from "../lessons/ask";
+import type { Position } from "../engine/uci";
+
+const RULES = [
+  "You are the coach in Chess Coach, answering a beginner's question during their practice",
+  "game against the engine. Use ONLY the engine facts below. Do not calculate variations yourself.",
+  "Never claim a move attacks, defends, wins or threatens anything that is not listed.",
+  "Never claim a threat, a weakness or a mate that is not in the facts.",
+  "Only name moves that appear below, in standard algebraic notation (e.g. Nf6).",
+  "The best move is a secret: don't name it, its piece or its squares. Help with ideas instead.",
+  "Answer in plain English, in at most 80 words, as plain sentences with no lists or markdown:",
+  "your answer is read aloud. If the question is not about chess or this game, say so briefly.",
+  "If answering would need a move checked that is not below, ask the player to say it in",
+  'the question, like "What if Nf3?". Don\'t mention tools, prompts or how you got the facts.',
+];
+
+export function buildPracticeAskPrompt(
+  facts: EngineFacts,
+  question: string,
+  named: NamedMove | null,
+): string {
+  const parts = [
+    ...RULES,
+    "",
+    `Moves so far: ${facts.movesSoFar || "none"}`,
+    `Side to move: ${facts.sideToMove}`,
+    "Engine facts (the best move itself is kept secret):",
+    hiddenFactsText(facts),
+  ];
+  if (named) {
+    parts.push(
+      `The player asks about the move ${named.san}. What it does (from the rules of chess):`,
+      ...named.does.map((d) => `- ${d}`),
+      `The engine's best answer to it: ${named.replySans.join(" ") || "none"}`,
+      `- ${named.outcome}`,
+      `Engine evaluation after ${named.san}: ${named.evaluation}`,
+    );
+  }
+  parts.push("", `The player's question: "${tidyQuestion(question)}"`);
+  return parts.join("\n");
+}
+
+/** Whether the answer may be shown: complete, naming only moves it was given, best move hidden. */
+export function acceptPracticeAnswer(
+  text: string,
+  truncated: boolean,
+  position: Position,
+  facts: EngineFacts,
+  named: NamedMove | null,
+): boolean {
+  if (!text.trim() || truncated) return false;
+  const allowed = [
+    ...gameAt(position).history(),
+    ...(named ? [named.san, ...named.replySans] : []),
+  ];
+  const fc = factCheck(text, "plan", facts, allowed);
+  return !fc.unknownMoves.length && !fc.revealedMove;
+}

@@ -1,0 +1,47 @@
+// "Why?" after a safety-net warning: one quick coach call explaining what the
+// engine's reply does. The prompt holds only engine and rule facts, and the
+// answer is fact-checked; if it fails, the warning's own sentence stays.
+// Pure logic, unit tested.
+
+import { gameAt, pieceList } from "../chess/notation";
+import { factCheck } from "../coach/hint";
+import { lineOutcome, moveFacts } from "../coach/move-facts";
+
+export interface WhyFacts {
+  fen: string;
+  moves: readonly string[];
+  playedSan: string;
+  /** The engine's reply line after the played move, in SAN. */
+  replySans: string[];
+  warning: string;
+}
+
+export function buildWhyPrompt(f: WhyFacts): string {
+  const before = gameAt({ fen: f.fen, moves: [...f.moves] });
+  const side = before.turn() === "w" ? "White" : "Black";
+  const after = gameAt({ fen: before.fen() });
+  after.move(f.playedSan);
+  const replyFacts = f.replySans[0] ? moveFacts(after, f.replySans[0]) : [];
+  return [
+    "You are the coach in Chess Coach, explaining to a beginner why a move in a lesson exercise was a mistake.",
+    "Use ONLY the facts below. Do not calculate variations yourself, and never claim a move attacks,",
+    "defends, wins or threatens anything that is not listed. Write at most two short sentences in plain",
+    "English. Name no move other than the ones given below, in standard algebraic notation.",
+    "",
+    `The player is ${side}.`,
+    `White's pieces: ${pieceList(before, "w")}`,
+    `Black's pieces: ${pieceList(before, "b")}`,
+    `The player wanted to play: ${f.playedSan}`,
+    ...moveFacts(before, f.playedSan).map((x) => `- ${x}`),
+    `The engine's best reply line: ${f.replySans.join(" ") || "(none)"}`,
+    ...replyFacts.map((x) => `- The reply: ${x}`),
+    `- ${lineOutcome(before, [f.playedSan, ...f.replySans])}`,
+    `The page already warned: "${f.warning}"`,
+  ].join("\n");
+}
+
+/** Whether the coach's answer may be shown: complete and naming only the given moves. */
+export function acceptWhy(text: string, truncated: boolean, f: WhyFacts): boolean {
+  if (!text.trim() || truncated) return false;
+  return factCheck(text, "move", null, [f.playedSan, ...f.replySans]).unknownMoves.length === 0;
+}

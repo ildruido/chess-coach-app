@@ -1,0 +1,53 @@
+// What to tell the player when a coach call fails, by error code. No DOM, so it can be unit tested.
+
+export interface ErrorAdvice {
+  /** Text for the player; empty when nothing needs saying. */
+  message: string;
+  /** True when the coach cannot work for the rest of this visit. */
+  disable: boolean;
+}
+
+const UNAVAILABLE = "Claude isn't available to this page on your account.";
+
+// Codes the coach call can fail with (the web platform maps HTTP statuses to the same codes). Unknown codes fall back to a retry message.
+const ADVICE: Record<string, ErrorAdvice> = {
+  cancelled: { message: "Stopped.", disable: false },
+  not_granted: {
+    message: "You declined the Claude prompt, so the coach is off. Reload to be asked again.",
+    disable: true,
+  },
+  sampling_disabled: { message: UNAVAILABLE, disable: true },
+  not_declared: { message: UNAVAILABLE, disable: true },
+  capability_disabled: { message: UNAVAILABLE, disable: true },
+  capability_removed: { message: UNAVAILABLE, disable: true },
+  rate_limited: {
+    message: "You've reached a usage limit. Wait a few minutes, then ask again.",
+    disable: false,
+  },
+  session_expired: {
+    message: "Your Claude session expired. Sign in again, then ask.",
+    disable: false,
+  },
+  offline: {
+    message: "You're offline. The coach needs an internet connection. Reconnect, then ask again.",
+    disable: false,
+  },
+  refused: { message: "Claude declined that question. Try rephrasing it.", disable: false },
+  empty_completion: {
+    message: "Claude returned an empty answer. Try a simpler question.",
+    disable: false,
+  },
+  prompt_too_large: {
+    message: "That question is too long. Shorten it and ask again.",
+    disable: false,
+  },
+};
+
+const FALLBACK: ErrorAdvice = {
+  message: "Couldn't reach Claude. Ask again in a moment.",
+  disable: false,
+};
+
+export function describeError(code: string | undefined): ErrorAdvice {
+  return (code && ADVICE[code]) || FALLBACK;
+}

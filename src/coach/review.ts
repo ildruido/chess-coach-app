@@ -1,0 +1,439 @@
+// Post-game review: the turning points of a finished practice game, chosen
+// by the engine's evaluation swings, with what happened, what was better and
+// why, and one lesson. The engine and the rules supply every fact; the coach
+// only words the "why" and the lesson, in one call for the whole game.
+// Pure functions, unit tested. The review is plain JSON, ready to be saved.
+import { Chess } from "chess.js";
+import { gameAt, numberedLine, uciLineToSan } from "../chess/notation";
+import type { Analysis } from "../engine/uci";
+import { type MoveReview, INACCURACY, VERDICT_LABEL, materialGain, reviewMove } from "./commentary";
+import { factCheck } from "./hint";
+import { threatenedPieces } from "./move-facts";
+
+export const MAX_POINTS = 5;
+/** An engine move that lost this much winning chance is a slip worth showing. */
+const ENGINE_SLIP = 20;
+/** The player's reply "spotted" a slip if it lost at most this much (centipawns, and win chance). */
+const SPOTTED_CP = 100;
+/** Engine line kept per turning point, in moves. */
+const LINE_LENGTH = 6;
+/** Words allowed in the coach's "why" and lesson; longer ones give way to the engine's. */
+export const WHY_WORDS = 50;
+export const LESSON_WORDS = 35;
+/** Engine time per position: the whole game in about half a minute, within these bounds. */
+const BUDGET_MS = 30_000;
+const MIN_MS = 150;
+const MAX_MS = 400;
+/** Candidate lines per position, so a played candidate is judged within one search. */
+export const REVIEW_LINES = 3;
+
+/**
+ * Why a move is a turning point: one of the player's moves that wasn't good,
+ * or ("spotted") a good reply that took advantage of the engine's slip.
+ */
+export type PointKind = "inaccuracy" | "mistake" | "missed" | "spotted";
+
+export const KIND_LABEL: Record<PointKind, string> = {
+  inaccuracy: VERDICT_LABEL.inaccuracy,
+  mistake: VERDICT_LABEL.mistake,
+  missed: VERDICT_LABEL.missed,
+  spotted: "Well spotted",
+};
+
+export interface TurningPoint {
+  /** Index of the player's move in the game. */
+  ply: number;
+  kind: PointKind;
+  /** Winning chance (percentage points) the move lost, or the engine's slip gave away. */
+  swing: number;
+  /** The position before the player's move. */
+  fenBefore: string;
+  playedUci: string;
+  playedSan: string;
+  bestUci: string;
+  bestSan: string;
+  isBest: boolean;
+  /** The engine's line from the position, in SAN, starting with the best move. */
+  bestLine: string[];
+  playedFacts: string[];
+  bestFacts: string[];
+  bestGain: number;
+  bestMates: boolean;
+  evalBefore: string;
+  evalAfter: string;
+  /** The played move left its piece under real attack (undefended, or attacked by a cheaper piece). */
+  leftHanging: boolean;
+  /** "Spotted" points: the engine's move just before, and what it did. */
+  slipSan?: string;
+  slipFacts?: string[];
+  /** Why, in plain words: the coach's if it passed the check, else the engine's. */
+  why: string;
+  whyBy: "coach" | "engine";
+}
+
+export interface GameReview {
+  version: 1;
+  /** How the game ended, from the player's side. */
+  result: string;
+  /** In game order. Fewer than three when the player made few mistakes. */
+  points: TurningPoint[];
+  lesson: string;
+  lessonBy: "coach" | "engine";
+}
+
+/** Engine time per position for a game of `moves` half-moves (positions = moves + 1). */
+export function reviewMovetime(moves: number): number {
+  return Math.round(Math.min(MAX_MS, Math.max(MIN_MS, BUDGET_MS / (moves + 1))));
+}
+
+/** "12." for White's twelfth move, "12..." for Black's. */
+export function moveNumber(ply: number): string {
+  return `${Math.floor(ply / 2) + 1}.${ply % 2 ? ".." : ""}`;
+}
+
+/**
+ * The turning points of a game. `analyses[i]` is the engine's analysis of
+ * the position after the first `i` moves (all of them, up to the final one).
+ * `playerFirst` is 0 when the player had White, 1 for Black.
+ */
+export function turningPoints(
+  moves: readonly string[],
+  analyses: readonly (Analysis | null)[],
+  playerFirst: 0 | 1,
+  max = MAX_POINTS,
+): TurningPoint[] {
+  // Each position once, as a FEN: replaying the game from the start for every move is quadratic.
+  const fens = positionsOf(moves);
+  const reviews = moves.map((uci, i) => {
+    const before = analyses[i];
+    if (!before || !fens[i]) return null;
+    try {
+      return reviewMove({ fen: fens[i] }, before, analyses[i + 1] ?? null, uci);
+    } catch {
+      return null;
+    }
+  });
+  const points: TurningPoint[] = [];
+  for (let ply = playerFirst; ply < moves.length; ply += 2) {
+    const r = reviews[ply];
+    if (!r) continue;
+    if (r.verdict !== "good") {
+      points.push(toPoint(moves, fens, analyses, ply, r, r.verdict, r.loss));
+      continue;
+    }
+    // A good reply to the engine's slip: the player took advantage of it.
+    // Only a real mistake by the engine counts, not a chance it let pass
+    // ("missed"), which mostly follows the player's own blunder.
+    const slip = ply > 0 ? reviews[ply - 1] : null;
+    if (slip?.verdict !== "mistake" || slip.loss < ENGINE_SLIP) continue;
+    // Recovering from one's own mistake isn't spotting anything.
+    const own = ply > 1 ? reviews[ply - 2] : null;
+    if (own && own.verdict !== "good") continue;
+    if (!r.isBest && (r.cpLoss > SPOTTED_CP || r.loss >= INACCURACY / 2)) continue;
+    const p = toPoint(moves, fens, analyses, ply, r, "spotted", slip.loss);
+    p.slipSan = slip.playedSan;
+    p.slipFacts = slip.playedFacts;
+    points.push(p);
+  }
+  const rank: Record<PointKind, number> = { missed: 0, mistake: 1, spotted: 2, inaccuracy: 3 };
+  return points
+    .sort((a, b) => b.swing - a.swing || rank[a.kind] - rank[b.kind] || a.ply - b.ply)
+    .slice(0, max)
+    .sort((a, b) => a.ply - b.ply);
+}
+
+/** The FEN before each move, and after the last: one pass over the game. */
+function positionsOf(moves: readonly string[]): string[] {
+  const game = new Chess();
+  const fens = [game.fen()];
+  for (const uci of moves) {
+    try {
+      game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] });
+    } catch {
+      break;
+    }
+    fens.push(game.fen());
+  }
+  return fens;
+}
+
+function toPoint(
+  moves: readonly string[],
+  fens: readonly string[],
+  analyses: readonly (Analysis | null)[],
+  ply: number,
+  r: MoveReview,
+  kind: PointKind,
+  swing: number,
+): TurningPoint {
+  const game = gameAt({ fen: fens[ply] });
+  const pv = analyses[ply]?.pv ?? [];
+  const line = uciLineToSan(game, pv[0] === r.bestUci ? pv : [r.bestUci]).slice(0, LINE_LENGTH);
+  // Material over the moves shown, ending after the opponent's reply where
+  // possible, so the gain stated is one the shown line really makes.
+  const even = line.slice(0, line.length - (line.length % 2));
+  const p: TurningPoint = {
+    ply,
+    kind,
+    swing,
+    fenBefore: game.fen(),
+    playedUci: moves[ply]!,
+    playedSan: r.playedSan,
+    bestUci: r.bestUci,
+    bestSan: r.bestSan,
+    isBest: r.isBest,
+    bestLine: line,
+    playedFacts: r.playedFacts,
+    bestFacts: r.bestFacts,
+    bestGain: materialGain(game, even.length ? even : line),
+    bestMates: r.bestMates,
+    evalBefore: r.evalBefore,
+    evalAfter: r.evalAfter,
+    leftHanging: threatenedPieces(gameAt({ fen: fens[ply + 1] })).some(
+      (t) => t.square === moves[ply]!.slice(2, 4),
+    ),
+    why: "",
+    whyBy: "engine",
+  };
+  p.why = engineWhy(p);
+  return p;
+}
+
+/** What a move does, as a verb phrase, in order of importance (the first fact only names the move). */
+const KEY_FACTS: [RegExp, string][] = [
+  [/^It is checkmate\.$/, "is checkmate"],
+  [/^It captures (an? \w+)\.$/, "captures $1"],
+  [/^It promotes to (an? \w+)\.$/, "promotes to $1"],
+  [/^It gives check\.$/, "gives check"],
+  [/^After it, the moved piece attacks (.+)\.$/, "attacks $1"],
+];
+
+/** The most telling thing a move does, from its facts: "captures a pawn". */
+function keyFact(facts: readonly string[]): string | null {
+  for (const [re, phrase] of KEY_FACTS) {
+    const f = facts.slice(1).find((x) => re.test(x));
+    if (f) return f.replace(re, phrase);
+  }
+  return null;
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** One line on what happened. */
+export function happenedText(p: TurningPoint): string {
+  if (p.kind === "spotted") {
+    return `The engine played ${p.slipSan}, a mistake. You answered ${moveNumber(p.ply)} ${p.playedSan}.`;
+  }
+  const played = `You played ${moveNumber(p.ply)} ${p.playedSan}.`;
+  // The words top out once a side is winning; then say what still changed.
+  if (p.evalBefore === p.evalAfter) {
+    return `${played} ${capital(p.evalBefore)} before and after it, but it gave away more than the engine's best move.`;
+  }
+  return `${played} Before it, ${p.evalBefore}; after it, ${p.evalAfter}.`;
+}
+
+/** One line on what was better. */
+export function betterText(p: TurningPoint): string {
+  if (p.kind === "spotted") {
+    return p.isBest
+      ? "Your move was the engine's top choice."
+      : `Your move was nearly as good as the engine's top choice, ${p.bestSan}.`;
+  }
+  return `${p.bestSan} was better.`;
+}
+
+/** Why, from the engine's facts alone: used when the coach can't be asked or fails the check. */
+export function engineWhy(p: TurningPoint): string {
+  if (p.kind === "spotted") {
+    const does = keyFact(p.playedFacts);
+    return does
+      ? `${p.playedSan} ${does}, taking advantage of the engine's slip.`
+      : `${p.playedSan} took advantage of the engine's slip.`;
+  }
+  const parts: string[] = [];
+  if (p.bestMates) parts.push(`${p.bestSan} leads to a forced mate.`);
+  else if (p.bestGain > 0) {
+    const n = p.bestGain;
+    parts.push(
+      `${p.bestSan} wins ${n} point${n === 1 ? "" : "s"} of material in the engine's line.`,
+    );
+  } else {
+    const does = keyFact(p.bestFacts);
+    if (does) parts.push(`${p.bestSan} ${does}.`);
+  }
+  if (p.leftHanging) {
+    parts.push(`After ${p.playedSan}, your piece on ${p.playedUci.slice(2, 4)} could be captured.`);
+  }
+  if (!parts.length) parts.push(`${p.bestSan} keeps the position as it was: ${p.evalBefore}.`);
+  return parts.join(" ");
+}
+
+/** One lesson from the engine's facts alone. */
+export function engineLesson(points: readonly TurningPoint[]): string {
+  const errors = points.filter((p) => p.kind !== "spotted");
+  if (errors.some((p) => p.kind === "missed")) {
+    return "Before each move, look at every check and capture you have: that's where chances hide.";
+  }
+  if (errors.some((p) => p.leftHanging)) {
+    return "Before you move a piece, check whether it can be captured on its new square.";
+  }
+  if (!errors.length && points.length) {
+    return "You punished the engine's slips. Keep asking after each of its moves: what did it leave undefended?";
+  }
+  if (!points.length) {
+    return "No big mistakes in this game. Keep checking what each move attacks and what it leaves undefended.";
+  }
+  return "Before you play, compare two or three candidate moves, and ask what your opponent's last move threatens.";
+}
+
+/** The review from the engine alone. */
+export function engineReview(result: string, points: TurningPoint[]): GameReview {
+  return { version: 1, result, points, lesson: engineLesson(points), lessonBy: "engine" };
+}
+
+/** Moves of the game as SAN, for the prompt and the check. */
+export function gameSans(moves: readonly string[]): string[] {
+  return gameAt({ moves: [...moves] }).history();
+}
+
+const pointFacts = (p: TurningPoint, moves: readonly string[]): string[] => {
+  const before = gameAt({ moves: moves.slice(0, p.ply) });
+  const lines = [
+    `Turning point ply ${p.ply} (${moveNumber(p.ply)} ${p.playedSan}), shown to the player as "${KIND_LABEL[p.kind]}":`,
+  ];
+  if (p.kind === "spotted") {
+    lines.push(
+      `- The engine had just played ${p.slipSan}, a mistake that cost it ${p.swing}% winning chance.`,
+      ...(p.slipFacts ?? []).map((f) => `  - ${f}`),
+      `- The player answered ${p.playedSan}${p.isBest ? ", the engine's top choice" : ", nearly as good as the engine's top choice"}.`,
+    );
+  } else {
+    lines.push(`- The move lost ${p.swing}% winning chance.`);
+  }
+  lines.push(
+    `- Evaluation before the move: ${p.evalBefore}. After it: ${p.evalAfter}.`,
+    `- What ${p.playedSan} did (from the rules of chess):`,
+    ...p.playedFacts.map((f) => `  - ${f}`),
+    ...(p.leftHanging
+      ? [
+          `  - It left the piece on ${p.playedUci.slice(2, 4)} under real attack (undefended, or attacked by a cheaper piece).`,
+        ]
+      : []),
+  );
+  if (!p.isBest) {
+    lines.push(
+      `- The engine's best move: ${p.bestSan}. Its line: ${numberedLine(before, p.bestLine)}.`,
+      `- What ${p.bestSan} does (from the rules of chess):`,
+      ...p.bestFacts.map((f) => `  - ${f}`),
+    );
+    if (p.bestGain > 0)
+      lines.push(`  - In the engine's line it wins ${p.bestGain} points of material.`);
+    if (p.bestMates) lines.push("  - It leads to a forced mate.");
+  }
+  return lines;
+};
+
+/**
+ * Prompt for the whole review in one call: the coach writes only "why" for
+ * each turning point and one lesson, as JSON. The page shows the verdicts,
+ * what happened and the better move itself.
+ */
+export function buildReviewPrompt(
+  review: GameReview,
+  moves: readonly string[],
+  player: "white" | "black",
+  level: string,
+): string {
+  const sans = gameSans(moves);
+  const plies = review.points.map((p) => p.ply);
+  return [
+    "You are the coach in Chess Coach, reviewing a beginner's finished practice game against the engine.",
+    "Use ONLY the engine facts below. Do not calculate variations yourself, and never claim a move",
+    "attacks, defends, wins or threatens anything that is not listed. Mention no move other than",
+    "the moves played and the engine's lines given below, in standard algebraic notation.",
+    "The page already shows each turning point's verdict, the move played and the better move:",
+    "don't repeat or contradict them. Never recite the engine's line move by move: teach the idea.",
+    "",
+    `For each turning point, write "why": at most ${WHY_WORDS - 10} words, plain English, explaining why the`,
+    'better move was better (or, for "Well spotted", why the player\'s move took advantage).',
+    `Then write ONE "lesson" for the player to take away: at most ${LESSON_WORDS - 5} words, a habit tied to`,
+    "one of the turning points, not a generic slogan.",
+    "Answer with JSON only, no other text, exactly in this shape:",
+    `{"points":[${plies.map((n) => `{"ply":${n},"why":"..."}`).join(",")}],"lesson":"..."}`,
+    "",
+    "Engine facts:",
+    `The player had ${player}; the engine played at level ${level}.`,
+    `Result: ${review.result}`,
+    `Moves: ${numberedLine(new Chess(), sans) || "(none)"}`,
+    ...(review.points.length
+      ? review.points.flatMap((p) => ["", ...pointFacts(p, moves)])
+      : ["", "No turning points: the engine found no real mistakes in the player's moves."]),
+  ].join("\n");
+}
+
+export interface CoachAnswer {
+  points: { ply: number; why: string }[];
+  lesson: string;
+}
+
+/** Reads the coach's JSON answer (code fences tolerated); null if it isn't one. */
+export function parseReviewAnswer(text: string): CoachAnswer | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  const points = Array.isArray(d.points)
+    ? d.points.flatMap((p) => {
+        const q = p as Record<string, unknown> | null;
+        return q && Number.isInteger(q.ply) && typeof q.why === "string"
+          ? [{ ply: q.ply as number, why: q.why.trim() }]
+          : [];
+      })
+    : [];
+  const lesson = typeof d.lesson === "string" ? d.lesson.trim() : "";
+  if (!points.length && !lesson) return null;
+  return { points, lesson };
+}
+
+const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
+
+/** A coach text may be shown: not empty, not too long, and naming only moves it was given. */
+function passes(text: string, maxWords: number, allowed: string[]): boolean {
+  if (!text || words(text) > maxWords) return false;
+  return !factCheck(text, "move", null, allowed).unknownMoves.length;
+}
+
+/**
+ * The review with the coach's texts where they pass the check; every other
+ * text stays the engine's. A truncated answer counts as no answer.
+ */
+export function applyCoachAnswer(
+  review: GameReview,
+  answer: CoachAnswer | null,
+  truncated: boolean,
+  moves: readonly string[],
+): GameReview {
+  if (!answer || truncated) return review;
+  const sans = gameSans(moves);
+  const points = review.points.map((p) => {
+    const why = answer.points.find((a) => a.ply === p.ply)?.why ?? "";
+    // Only moves up to this point (and the reply to it) and its engine line.
+    return passes(why, WHY_WORDS, [...sans.slice(0, p.ply + 2), ...p.bestLine])
+      ? { ...p, why, whyBy: "coach" as const }
+      : p;
+  });
+  const allLines = review.points.flatMap((p) => p.bestLine);
+  const lessonOk = passes(answer.lesson, LESSON_WORDS, [...sans, ...allLines]);
+  return {
+    ...review,
+    points,
+    ...(lessonOk && { lesson: answer.lesson, lessonBy: "coach" as const }),
+  };
+}

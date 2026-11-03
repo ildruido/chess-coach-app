@@ -1,0 +1,1109 @@
+/* Layout: one narrow column, a study-notebook page. Board woods for color, notation in mono. */
+:root {
+  --bg: #f3f0ea;
+  --surface: #fbfaf7;
+  --ink: #26221d;
+  --muted: #6b6359;
+  --line: #d9d2c6;
+  --light-sq: #e6d3b3;
+  --dark-sq: #8a5a3c;
+  --accent: #2f5d50;
+  --accent-ink: #ffffff;
+  --ok: #2f6b3a;
+  --warn: #9a4b16;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1916;
+    --surface: #24211d;
+    --ink: #ece6dc;
+    --muted: #a69d90;
+    --line: #3a352e;
+    --light-sq: #b89a74;
+    --dark-sq: #5e3d29;
+    --accent: #6fb39c;
+    --accent-ink: #10201b;
+    --ok: #82c08c;
+    --warn: #e5a06d;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1b1916;
+  --surface: #24211d;
+  --ink: #ece6dc;
+  --muted: #a69d90;
+  --line: #3a352e;
+  --light-sq: #b89a74;
+  --dark-sq: #5e3d29;
+  --accent: #6fb39c;
+  --accent-ink: #10201b;
+  --ok: #82c08c;
+  --warn: #e5a06d;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Layout rules (display: grid/flex) must never un-hide an element. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 1.0625rem/1.6 var(--font-body);
+}
+
+.wrap {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding-inline: 16px;
+  padding-block: 2.5rem 3rem;
+  display: grid;
+  gap: 1.75rem;
+}
+
+/* Grid items default to their content's width; let wide content (tables) scroll instead. */
+.wrap > *,
+.engine > *,
+.ask > *,
+.answer-card > *,
+.coach-controls > *,
+.practice-setup > *,
+.practice-play > * {
+  min-width: 0;
+}
+
+/* A select is as wide as its longest option unless told otherwise; fieldsets
+   default to min-content. Both would push the page wider than a phone. */
+.coach-controls select,
+.practice-setup select {
+  width: 100%;
+}
+
+.practice-setup,
+.practice-play {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.practice-setup > label {
+  font: 500 0.8rem/1.4 var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.practice-status {
+  font-size: 1rem;
+  color: var(--ink);
+}
+
+fieldset {
+  min-width: 0;
+}
+
+.masthead {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.masthead > div:last-child {
+  min-width: 0;
+}
+
+.mini-board {
+  width: 4.5rem;
+  aspect-ratio: 1;
+  max-width: 100%;
+  border: 2px solid var(--dark-sq);
+  background: repeating-conic-gradient(var(--light-sq) 0 25%, var(--dark-sq) 0 50%) 0 0 / 25% 25%;
+}
+
+.eyebrow {
+  margin: 0;
+  font: 500 0.75rem/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  text-wrap: balance;
+  margin: 0;
+}
+
+h1 {
+  font-weight: 800;
+  font-size: clamp(1.9rem, 6vw, 2.6rem);
+  line-height: 1.05;
+  margin-block: 0.2rem 0.6rem;
+}
+
+h2,
+h3 {
+  font-weight: 500;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lede {
+  margin: 0;
+  color: var(--muted);
+  max-width: 34rem;
+}
+
+.ask {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.ask label {
+  font: 500 0.8rem/1.4 var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 0.75rem 0.85rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+textarea:focus-visible,
+button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+button {
+  font: 500 0.95rem/1 var(--font-display);
+  padding: 0.8rem 1.2rem;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  cursor: pointer;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.status {
+  margin: 0;
+  font: 400 0.85rem/1.5 var(--font-mono);
+  color: var(--muted);
+}
+
+.status[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.status[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Stays in view while Ale plays further down, so "Try the coach again" is always at hand. */
+.coach-paused {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  padding: 0.85rem 1rem;
+  color: var(--warn);
+  background: var(--surface);
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+}
+
+.coach-paused[hidden] {
+  display: none;
+}
+
+.coach-paused p {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.diag-note {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: 400 0.8rem/1.5 var(--font-mono);
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.answer-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.answer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 3lh;
+}
+
+.answer[data-state="idle"],
+.answer[data-state="thinking"] {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.engine {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.engine-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+
+.engine-head .status {
+  min-width: 0;
+}
+
+.readout {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.readout > div {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 1rem;
+}
+
+.readout dt {
+  font: 500 0.75rem/1.9 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.readout > p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.readout dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notation {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--accent);
+}
+
+.board-wrap {
+  position: relative;
+  width: min(100%, 30rem);
+}
+
+.board {
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 100%;
+}
+
+/* chessground coordinates sit on the board edge; keep them legible on the brown theme. */
+.board coords {
+  font-family: var(--font-mono);
+}
+
+/* chessground shifts the a–h labels 24px right, past the board's edge, which
+   makes a phone page scroll sideways. Keep them inside: one per file, at its
+   bottom-right corner. */
+.board.cg-wrap coords.files {
+  left: 0;
+  bottom: 0;
+}
+
+.board.cg-wrap coords.files coord {
+  text-align: right;
+  padding-right: 3px;
+}
+
+.promotion {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+}
+
+.promotion p {
+  flex-basis: 100%;
+  margin: 0;
+  text-align: center;
+  font: 500 0.9rem/1.4 var(--font-display);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.levels {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.levels th,
+.levels td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.levels th {
+  font: 500 0.72rem/1.4 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.levels td:nth-child(3) {
+  min-width: 14rem;
+  color: var(--muted);
+}
+
+.coach-controls {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.coach-controls > label,
+.modes legend {
+  font: 500 0.8rem/1.4 var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+select {
+  font: inherit;
+  max-width: 100%;
+  padding: 0.55rem 0.7rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.modes legend {
+  padding: 0;
+  margin-bottom: 0.4rem;
+}
+
+.modes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* A locked choice (the game's hint mode) shouldn't look clickable, but the
+   chosen option stays easy to read. */
+.modes:disabled label {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.modes:disabled label:has(input:checked) {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.mode-note {
+  font: 400 0.85rem/1.5 var(--font-mono);
+  color: var(--muted);
+}
+
+select:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+  .readout > div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font: 400 0.8rem/1.4 var(--font-mono);
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+@media (max-width: 420px) {
+  .masthead {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Hints in the practice game: the coach's steps for this move, in order. */
+.hints > * {
+  min-width: 0;
+}
+
+.hint-log {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hint-log:empty {
+  display: none;
+}
+
+.hint-log li {
+  display: grid;
+  gap: 0.15rem;
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--accent);
+}
+
+.hint-log h4 {
+  margin: 0;
+  font: 500 0.75rem/1.5 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hint-log p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.commentary {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.read-aloud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.read-aloud:not(:has(> :not([hidden]))) {
+  display: none;
+}
+
+.read-aloud .status {
+  margin: 0;
+}
+
+.comment-log[hidden] {
+  display: none;
+}
+
+/* Newest first; only the latest few, so a long game doesn't push the board away. */
+.comment-log li:nth-child(n + 6) {
+  display: none;
+}
+
+.comment-log h4 {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.comment-log li[data-verdict="good"] {
+  border-left-color: var(--ok);
+}
+
+.comment-log li[data-verdict="inaccuracy"],
+.comment-log li[data-verdict="mistake"],
+.comment-log li[data-verdict="missed"] {
+  border-left-color: var(--warn);
+}
+
+/* Post-game review: each turning point with its position, then one lesson. */
+.review > * {
+  min-width: 0;
+}
+
+.review-summary {
+  margin: 0;
+}
+
+.review-summary:empty {
+  display: none;
+}
+
+.review-points {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-points:empty {
+  display: none;
+}
+
+.review-points li {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: start;
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--warn);
+}
+
+.review-points li[data-kind="spotted"] {
+  border-left-color: var(--ok);
+}
+
+.review-points h4 {
+  margin: 0;
+  font: 500 0.85rem/1.5 var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+.review-texts {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.review-texts p,
+.review-lesson p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.review-board {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.review-lesson {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+}
+
+.review-lesson[hidden] {
+  display: none;
+}
+
+.review-lesson h4 {
+  margin: 0;
+  font: 500 0.75rem/1.5 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+@media (max-width: 30rem) {
+  .review-points li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review-board {
+    max-width: 14rem;
+  }
+}
+
+/* Past games: one row per finished game, newest first, and a viewer that replays one. */
+.history-list {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-list:empty {
+  display: none;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.1rem 0.8rem;
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+}
+
+.history-row[data-outcome="win"] {
+  border-left-color: var(--ok);
+}
+
+.history-row[data-outcome="loss"] {
+  border-left-color: var(--warn);
+}
+
+.history-outcome {
+  font: 500 0.9rem/1.5 var(--font-display);
+}
+
+.history-when {
+  font: 400 0.85rem/1.5 var(--font-mono);
+  color: var(--muted);
+}
+
+.history-details {
+  grid-column: 1 / -1;
+  font: 400 0.9rem/1.5 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+.history-view {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.history-view h3,
+.history-view > p {
+  margin: 0;
+}
+
+.history-view .board-wrap {
+  width: min(100%, 24rem);
+}
+
+.practice-opening {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* Screens: Practice and Lessons (CC-025). */
+.screens {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.screens button[aria-pressed="false"] {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.lesson-list,
+.lesson-group,
+.lesson-cards {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lesson-list {
+  gap: 1.25rem;
+}
+
+.lesson-overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lesson-overview .status {
+  margin: 0;
+}
+
+.lesson-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lesson-views button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.lesson-card[data-next="true"] {
+  border: 2px solid var(--accent);
+}
+
+.lesson-group-title,
+.advice-title {
+  margin: 0;
+  font: 800 0.95rem/1.2 var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lesson-num,
+.lesson-summary {
+  margin: 0;
+}
+
+.lesson-num {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.lesson-card[data-state="done"] {
+  border-left: 4px solid var(--ok);
+}
+
+.lesson-card[data-state="inProgress"] {
+  border-left: 4px solid var(--accent);
+}
+
+.lesson-card,
+.advice-item,
+.advice-mistake {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.lesson-card-title,
+.advice-card-title,
+.lesson-title {
+  margin: 0;
+  font: 800 1.15rem/1.2 var(--font-display);
+}
+
+.lesson-play {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.lesson-text {
+  margin: 0;
+  min-height: 3em;
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.lesson-text[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.lesson-text[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.lesson-banner {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 1.1rem;
+  border: 2px solid var(--warn);
+  background: var(--surface);
+}
+
+.lesson-banner p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.lesson-banner .lesson-why {
+  font-weight: 400;
+}
+
+.lesson-ask h3 {
+  margin: 0;
+}
+
+.lesson-questions button {
+  font-weight: 400;
+  text-align: left;
+  line-height: 1.3;
+}
+
+.lesson-ask-form {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.lesson-ask-row {
+  display: flex;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.lesson-ask-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 0.6rem 0.75rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.lesson-answer {
+  display: grid;
+  gap: 0.25rem;
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--accent);
+}
+
+.lesson-answer p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.lesson-answer-q {
+  font: 500 0.8rem/1.5 var(--font-display);
+  color: var(--muted);
+}
+
+.lesson-answer-note {
+  font: 500 0.8rem/1.5 var(--font-display);
+  color: var(--accent);
+}
+
+.lesson-answer .actions {
+  margin-top: 0.35rem;
+}
+
+.lesson-vote {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.lesson-vote button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.6rem;
+}
+
+.lesson-vote button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.lesson-end {
+  justify-items: start;
+}
+
+.lesson-end h3,
+.lesson-takeaway {
+  margin: 0;
+}
+
+.lesson-takeaway {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.reuse-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.reuse-note button {
+  min-height: 2.75rem;
+  padding: 0.3rem 0.6rem;
+}
+
+.reuse-note button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.lesson-advice {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.advice-mistakes {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.voice-talk {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.voice-talk .status {
+  margin: 0;
+}
+
+.voice-confirm {
+  display: grid;
+  gap: 0.5rem;
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--accent);
+}
+
+.voice-confirm p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.data-export {
+  margin-top: 1.5rem;
+}
+
+/* Web app sign-in (CC-043e) */
+.auth-wrap {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+.auth-card {
+  display: grid;
+  gap: 1rem;
+  width: min(26rem, 100%);
+}
+.auth-field {
+  display: grid;
+  gap: 0.25rem;
+}
+.auth-message:empty {
+  display: none;
+}
+.auth-message {
+  color: var(--warn);
+}
+.link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+.session-bar {
+  overflow-wrap: anywhere;
+}

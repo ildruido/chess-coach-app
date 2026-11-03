@@ -1,0 +1,301 @@
+// "Ask the coach" in a lesson (CC-026): Ale's own question, and "Explain
+// differently". The engine supplies every chess fact; the prompts hand them to
+// the coach and the answer is fact-checked before it is shown. Suggested
+// questions need none of this: their answers are written in the lesson file.
+// Pure logic, unit tested.
+
+import type { Chess } from "chess.js";
+import { gameAt, pieceList, uciLineToSan } from "../chess/notation";
+import {
+  buildFacts,
+  type EngineFacts,
+  factCheck,
+  factsText,
+  hiddenFactsText,
+  moveKey,
+} from "../coach/hint";
+import { describeError } from "../coach/errors";
+import { lineOutcome, moveFacts, positionFacts } from "../coach/move-facts";
+import { isUsageLimit } from "../coach/usage";
+import type { Analysis, Position } from "../engine/uci";
+import { textParts, textRefs } from "./lesson-text";
+
+/** Longest question sent to the coach, in characters. */
+export const MAX_QUESTION = 200;
+
+/** Where Ale is in a lesson when asking: what the step shows, and the position on the board. */
+export interface AskContext {
+  lessonTitle: string;
+  kind: "explain" | "show" | "quiz" | "exercise";
+  /** The step's text on screen, with {references}. */
+  text: string;
+  /** Moves the step's text and line name, which the coach may repeat. */
+  textSans: string[];
+  /** The position on the board: a FEN and the UCI moves played from it. */
+  position: Position;
+  /** In an exercise that isn't solved yet, the answer stays secret. */
+  secret: boolean;
+  /**
+   * In an open quiz, the squares that answer it: the reply must name none of them, whatever the
+   * engine prefers (CC-070). The engine's own best move is then not a secret.
+   */
+  answerSquares?: string[];
+}
+
+/** What the engine says about a move Ale named in a question. */
+export interface NamedMove {
+  san: string;
+  /** What the move does, from the rules. */
+  does: string[];
+  /** The engine's best answer line after it, in SAN. */
+  replySans: string[];
+  outcome: string;
+  evaluation: string;
+}
+
+/** Plain text of a step's text: {references} without the braces. */
+export function plainText(text: string): string {
+  return textParts(text)
+    .map((p) => p.text)
+    .join("");
+}
+
+/** Moves the step's text names: SAN references that aren't plain squares. */
+export function textMoves(text: string): string[] {
+  return textRefs(text).filter((r) => !/^[a-h][1-8]$/.test(r));
+}
+
+// A move written in a question: piece moves (also lower case, "nf3"), pawn
+// captures, castling, and plain pawn moves ("e4").
+export const QUESTION_MOVE =
+  /\b(?:[KQRBNkqrbn][a-h]?[1-8]?x?[a-h][1-8](?:=[QRBNqrbn])?|[a-h]x[a-h][1-8](?:=[QRBNqrbn])?|[a-h][1-8](?:=[QRBNqrbn])?)[+#]?(?![\w-])|\b(?:O-O(?:-O)?|0-0(?:-0)?)(?![\w-])/g;
+
+/**
+ * The first legal move a question names, in SAN, or null. "What if Nf3?",
+ * "why not nxd5", "can I castle with O-O?" name a move; "take with the queen"
+ * doesn't. A lone square is a pawn move ("what if e4?") unless it names a
+ * place: after "on", "at", "to", "from", "the" or "of", or before "square"
+ * ("the knight on d5", "can my knight go to f3?"). "b" for a bishop must be
+ * capital ("bxc4" is a pawn capture).
+ */
+export function parseNamedMove(question: string, game: Chess): string | null {
+  const legal = game.moves();
+  for (const m of question.matchAll(QUESTION_MOVE)) {
+    const raw = m[0];
+    const place =
+      /\b(?:on|at|to|from|the|of)\s+$/i.test(question.slice(0, m.index)) ||
+      /^\s+squares?\b/i.test(question.slice(m.index + raw.length));
+    if (/^[a-h][1-8]/.test(raw) && place) continue;
+    const token = raw.replace(/[+#]/g, "").replace(/0/g, "O");
+    const tries = /^[kqrn]/.test(token) ? [token[0]!.toUpperCase() + token.slice(1)] : [token];
+    tries.push(tries[0]!.replace(/=([qrbn])$/, (_, p: string) => `=${p.toUpperCase()}`));
+    for (const t of tries) {
+      // Loose: "Qd5" finds "Qxd5", "Nd2" finds "Nbd2".
+      const found = legal.find((m) => moveKey(m) === moveKey(t));
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** The engine's view of a move Ale named: built from an analysis of the position after it. */
+export function namedMoveFacts(position: Position, san: string, after: Analysis): NamedMove {
+  const before = gameAt(position);
+  const next = gameAt(position);
+  next.move(san);
+  const replySans = uciLineToSan(next, after.pv).slice(0, 4);
+  const f = buildFacts(next, after);
+  return {
+    san,
+    does: moveFacts(before, san),
+    replySans,
+    outcome: lineOutcome(before, [san, ...replySans]),
+    evaluation: `${f.evaluation} (${f.evaluationInWords})`,
+  };
+}
+
+const ASK_RULES = [
+  "You are the coach in Chess Coach, answering a beginner's question during a chess lesson.",
+  "Use ONLY the lesson text and the engine facts below. Do not calculate variations yourself.",
+  "Never claim a move attacks, defends, wins or threatens anything that is not listed.",
+  "Never claim a threat, a weakness or a mate that is not in the facts.",
+  "Only name moves that appear below, in standard algebraic notation (e.g. Nf6).",
+  "Answer only about this lesson step and this position, in plain English, in at most",
+  "80 words. If the question is about something else, say so briefly and bring it back",
+  "to the lesson. If answering would need a move checked that is not below, ask the",
+  'player to type the move in the question, like "What if Nf3?".',
+  "Don't mention tools, prompts or how you got the facts.",
+  'After the answer, add one last line: "Scope: idea" if the answer explains a general',
+  'chess idea that holds in any position of this lesson (like "What is a pin?"), or',
+  '"Scope: position" if it is about this position.',
+];
+
+/**
+ * Splits the coach's "Scope: idea|position" line off its answer. A missing or
+ * unclear tag counts as "position": the answer then stays where it was given.
+ */
+export function splitScope(text: string): { answer: string; tag: "idea" | "place" } {
+  const m = /\n?[ \t]*\**scope\**:\**\s*\**(idea|position)\**\.?\s*$/i.exec(text);
+  if (!m) return { answer: text.trim(), tag: "place" };
+  return {
+    answer: text.slice(0, m.index).trim(),
+    tag: m[1]!.toLowerCase() === "idea" ? "idea" : "place",
+  };
+}
+
+const SECRET_RULES = [
+  "The player is solving this exercise. Don't give the answer away: name no move,",
+  "and not the square the best move goes to. Help with the idea instead.",
+];
+
+function lessonLines(ctx: AskContext, game: Chess): string[] {
+  return [
+    `Lesson: ${ctx.lessonTitle}`,
+    `This step (${ctx.kind}): ${plainText(ctx.text).replace(/\s+/g, " ").trim()}`,
+    `Side to move: ${game.turn() === "w" ? "White" : "Black"}`,
+    `White pieces: ${pieceList(game, "w")}`,
+    `Black pieces: ${pieceList(game, "b")}`,
+  ];
+}
+
+/** The question Ale typed, tidied and cut to MAX_QUESTION characters. */
+export function tidyQuestion(question: string): string {
+  return question.replace(/\s+/g, " ").trim().slice(0, MAX_QUESTION);
+}
+
+/**
+ * In an open exercise, a question naming the answer itself gets no coach call:
+ * the page says to try it on the board (and that counts as help).
+ */
+export function namesTheAnswer(ctx: AskContext, facts: EngineFacts, san: string | null) {
+  return ctx.secret && !!san && san === facts.bestMove;
+}
+
+export const TRY_IT_TEXT = "Good idea: try it on the board and see what happens.";
+
+export function buildAskPrompt(
+  ctx: AskContext,
+  facts: EngineFacts,
+  question: string,
+  named: NamedMove | null,
+): string {
+  const game = gameAt(ctx.position);
+  const secret = ctx.secret;
+  const parts = [...ASK_RULES, ...(secret ? SECRET_RULES : []), "", ...lessonLines(ctx, game)];
+  parts.push(
+    secret ? "Engine facts (the best move itself is kept secret):" : "Engine facts:",
+    secret ? hiddenFactsText(facts) : factsText(facts),
+  );
+  if (named) {
+    parts.push(
+      `The player asks about the move ${named.san}. What it does (from the rules of chess):`,
+      ...named.does.map((d) => `- ${d}`),
+      `The engine's best answer to it: ${named.replySans.join(" ") || "none"}`,
+      `- ${named.outcome}`,
+      `Engine evaluation after ${named.san}: ${named.evaluation}`,
+    );
+  }
+  parts.push("", `The player's question: "${tidyQuestion(question)}"`);
+  return parts.join("\n");
+}
+
+/** Whether a reply names one of these squares, bare ("on f7") or as a move's destination ("Qxf7+"). */
+export function namesSquare(text: string, squares: readonly string[]): boolean {
+  const wanted = new Set(squares.map((q) => q.toLowerCase()));
+  const bare = text.match(/(?<![\w-])[a-h][1-8](?![\w-])/gi) ?? [];
+  const dests = (text.match(QUESTION_MOVE) ?? []).map(
+    (m) => /([a-h][1-8])(?:=[QRBNqrbn])?[+#]?$/.exec(m)?.[1],
+  );
+  return [...bare, ...dests].some((q) => !!q && wanted.has(q.toLowerCase()));
+}
+
+/** Every move an answer may name: the step's own, the moves played, the engine's, and the named one's. */
+function allowedMoves(ctx: AskContext, facts: EngineFacts | null, named: NamedMove | null) {
+  const game = gameAt(ctx.position);
+  const played = game.history();
+  return [
+    ...ctx.textSans,
+    ...played,
+    ...(facts && (!ctx.secret || ctx.answerSquares) ? facts.lineSans : []),
+    ...(named ? [named.san, ...named.replySans] : []),
+  ];
+}
+
+/** Whether the coach's answer may be shown: complete, and naming only moves it was given. */
+export function acceptAsk(
+  text: string,
+  truncated: boolean,
+  ctx: AskContext,
+  facts: EngineFacts,
+  named: NamedMove | null,
+): boolean {
+  if (!text.trim() || truncated) return false;
+  // An open quiz keeps its own answer squares secret, not the engine's move (CC-070).
+  if (ctx.answerSquares?.length) {
+    if (namesSquare(text, ctx.answerSquares)) return false;
+    return !factCheck(text, "move", facts, allowedMoves(ctx, facts, named)).unknownMoves.length;
+  }
+  // While the exercise is open, the best move, its piece and its squares stay
+  // hidden, as in the early hints.
+  const fc = factCheck(text, ctx.secret ? "plan" : "move", facts, allowedMoves(ctx, facts, named));
+  return !fc.unknownMoves.length && !fc.revealedMove;
+}
+
+/** "Explain differently": the coach rewords the step's text for a beginner, from the rules only. */
+export function buildRewordPrompt(ctx: AskContext, earlier: readonly string[] = []): string {
+  const game = gameAt(ctx.position);
+  const threats = positionFacts(game);
+  return [
+    "You are the coach in Chess Coach. A beginner read this lesson step and wants it",
+    "explained differently. Say the same idea again in other, simpler words, in at most",
+    "60 words. Add nothing that isn't in the text or the facts below: no new moves, no",
+    "new threats, no variations. Only name moves the text names, in standard algebraic",
+    "notation. Don't mention prompts.",
+    "",
+    ...lessonLines(ctx, game),
+    "Pieces under attack now (from the rules of chess):",
+    ...(threats.length ? threats.map((t) => `- ${t}`) : ["- none"]),
+    ...(earlier.length
+      ? ["", "Ways you already explained it (say it another way):", ...earlier.map((e) => `- ${e}`)]
+      : []),
+  ].join("\n");
+}
+
+export function acceptReword(text: string, truncated: boolean, ctx: AskContext): boolean {
+  if (!text.trim() || truncated) return false;
+  const allowed = [...ctx.textSans, ...gameAt(ctx.position).history()];
+  return factCheck(text, "move", null, allowed).unknownMoves.length === 0;
+}
+
+/** Shown when the coach's answer fails the fact check. Ale can ask again; nothing retries on its own. */
+export const HELD_BACK_TEXT =
+  "The coach's answer didn't match the engine, so it isn't shown. Ask again to try once more.";
+
+/** What to say when a coach call fails, by sample error code. Never retried automatically. */
+export function coachErrorText(code: string | undefined, after: string): string {
+  if (isUsageLimit(code)) return `The coach is paused at your usage limit. ${after}`;
+  switch (code) {
+    case "refused":
+    case "empty_completion":
+    case "invalid_request":
+    case "prompt_too_large":
+      return `The coach couldn't answer this one. ${after}`;
+    default:
+      return describeError(code).message;
+  }
+}
+
+/**
+ * Whether an answer may be reused on other steps: the coach tagged it as about
+ * the idea, and neither the question nor the answer names a square or a move.
+ * Anything else stays tied to where it was given (the safe side).
+ */
+export function decideScope(
+  tag: "idea" | "place",
+  question: string,
+  answer: string,
+): "idea" | "place" {
+  if (tag !== "idea") return "place";
+  const namesBoard = (t: string) => (t.match(QUESTION_MOVE) ?? []).length > 0;
+  return namesBoard(question) || namesBoard(answer) ? "place" : "idea";
+}

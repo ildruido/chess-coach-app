@@ -1,0 +1,14 @@
+dist
+dist-e2e
+dist-web
+coverage
+playwright-report
+test-results
+package-lock.json
+# Docs are written for people; Prettier would only churn their tables.
+*.md
+# Generated data files: one line each, rebuilt by scripts/.
+src/data
+# The studio harness is copied from app-studio and formatted there.
+.claude
+server/src/shared

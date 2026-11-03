@@ -1,0 +1,50 @@
+{
+  "name": "chess-coach",
+  "version": "0.26.0",
+  "private": true,
+  "description": "Chess Coach: play chess with a Claude instructor that explains what the engine finds.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite --mode web",
+    "build": "tsc --noEmit && vite build --mode web --outDir dist-web",
+    "build:web": "npm run build",
+    "build:e2e": "tsc --noEmit && vite build --mode e2e --outDir dist-e2e",
+    "preview:e2e": "vite preview --port 4176 --strictPort --outDir dist-e2e",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build:e2e && npm run build && playwright test",
+    "sync:shared": "node scripts/sync-shared.mjs",
+    "calibrate": "vitest run --config vitest.calibrate.config.ts",
+    "check": "npm run format:check && npm run lint && npm run test && npm run build",
+    "data:openings": "tsx scripts/openings/build-openings.ts",
+    "data:puzzles": "tsx scripts/puzzles/build-puzzles.ts",
+    "verify:puzzles": "vitest run --config vitest.engine.config.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.12.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
+    "stockfish": "19.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "@lichess-org/chessground": "10.4.2",
+    "chess.js": "1.4.0"
+  },
+  "license": "GPL-3.0-or-later"
+}

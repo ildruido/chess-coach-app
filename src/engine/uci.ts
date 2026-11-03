@@ -1,0 +1,111 @@
+// Parsing for the UCI text protocol Stockfish speaks. Pure functions, unit tested.
+
+export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+/** Engine score from White's point of view. Exactly one of cp/mate is set. */
+export interface Score {
+  /** Centipawns: +100 means White is about a pawn better. */
+  cp?: number;
+  /** Moves to mate: positive means White mates, negative means Black mates. */
+  mate?: number;
+}
+
+export interface SearchInfo {
+  depth: number;
+  /** Which of the engine's candidate lines this is (1 = best). */
+  multipv: number;
+  score: Score;
+  /** Principal variation (best line) in UCI notation, e.g. ["e7e5", "g1f3"]. */
+  pv: string[];
+}
+
+export interface Analysis {
+  /** Null when the side to move has no legal moves (checkmate or stalemate). */
+  bestMove: string | null;
+  /** Deepest depth reported; 0 when the engine reported none. */
+  depth: number;
+  /** Missing when the engine reported no score. Never invented. */
+  score?: Score;
+  /** Best line in UCI notation; empty when there are no legal moves. */
+  pv: string[];
+  /** Wall-clock time the search took. */
+  ms: number;
+  /** With MultiPV: the engine's candidate lines, best first. */
+  lines?: SearchInfo[];
+}
+
+export function sideToMove(fen: string): "w" | "b" {
+  return fen.split(/\s+/)[1] === "b" ? "b" : "w";
+}
+
+/**
+ * Parses an `info depth ... score ... [pv ...]` line. Returns null for lines
+ * without a depth and exact score (currmove updates, strings, bound scores).
+ * UCI scores are from the side to move; this converts them to White's view.
+ * `score mate 0` means the side to move is already checkmated.
+ */
+export function parseInfo(line: string, side: "w" | "b"): SearchInfo | null {
+  const t = line.trim().split(/\s+/);
+  if (t[0] !== "info") return null;
+  if (t.includes("lowerbound") || t.includes("upperbound")) return null;
+  const depthAt = t.indexOf("depth");
+  const scoreAt = t.indexOf("score");
+  if (depthAt < 0 || scoreAt < 0) return null;
+
+  const kind = t[scoreAt + 1];
+  const value = Number(t[scoreAt + 2]);
+  if ((kind !== "cp" && kind !== "mate") || !Number.isFinite(value)) return null;
+  const sign = side === "w" ? 1 : -1;
+  const signed = value === 0 ? 0 : sign * value;
+  const score: Score = kind === "mate" ? { mate: signed } : { cp: signed };
+  const pvAt = t.indexOf("pv");
+  const multipvAt = t.indexOf("multipv");
+  const multipv = multipvAt < 0 ? 1 : Number(t[multipvAt + 1]) || 1;
+
+  return {
+    depth: Number(t[depthAt + 1]),
+    multipv,
+    score,
+    pv: pvAt < 0 ? [] : t.slice(pvAt + 1),
+  };
+}
+
+/** True for any `bestmove` line, including `bestmove (none)`. */
+export function isBestMoveLine(line: string): boolean {
+  return line.trim().split(/\s+/)[0] === "bestmove";
+}
+
+/** A position: a start FEN plus moves played from it (UCI notation). */
+export interface Position {
+  fen?: string;
+  moves?: string[];
+}
+
+export function positionCommand({ fen, moves = [] }: Position): string {
+  const base = fen ? `position fen ${fen}` : "position startpos";
+  return moves.length ? `${base} moves ${moves.join(" ")}` : base;
+}
+
+/** Side to move after playing `moves` from `fen` (or the start position). */
+export function sideAfter({ fen = START_FEN, moves = [] }: Position): "w" | "b" {
+  const start = sideToMove(fen);
+  if (moves.length % 2 === 0) return start;
+  return start === "w" ? "b" : "w";
+}
+
+/** Returns the move from a `bestmove e2e4 ponder e7e5` line, or null. */
+export function parseBestMove(line: string): string | null {
+  const t = line.trim().split(/\s+/);
+  if (t[0] !== "bestmove" || !t[1] || t[1] === "(none)") return null;
+  return t[1];
+}
+
+/** Short label from White's view: "+0.35", "-1.20", "White mates in 3", "Black mates in 2". */
+export function formatScore(score: Score): string {
+  if (score.mate !== undefined) {
+    if (score.mate === 0) return "Checkmate";
+    return score.mate > 0 ? `White mates in ${score.mate}` : `Black mates in ${-score.mate}`;
+  }
+  const pawns = (score.cp ?? 0) / 100;
+  return `${pawns > 0 ? "+" : ""}${pawns.toFixed(2)}`;
+}
