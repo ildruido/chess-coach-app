@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-05
+
+### Added
+
+- The board can be played from the keyboard and with a screen reader: a "Type a move" box (e4, Nf3, O-O, e2e4) under the Practice and lesson boards, every move said in words, and a "Read the board" button that lists the pieces and your legal moves. (CC-074)
+- A "Voice chat" button beside the board starts and stops voice chat in one tap, in Practice and in lessons. (CC-074)
+- A skip link, page landmarks and a page title for each screen. (CC-074)
+
+### Changed
+
+- If you have played before, the app opens straight into a game with your last level, colour and hint choice. New game still lets you change them; a game you leave before moving no longer lands in Past games. (CC-074)
+- Larger tap targets and clearer focus outlines; the selected lesson view keeps readable text in dark mode. (CC-074)
+
 ## [0.26.0] - 2026-11-03
 
 ### Added

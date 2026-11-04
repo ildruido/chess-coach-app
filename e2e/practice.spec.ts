@@ -125,7 +125,9 @@ test.describe("practice match", () => {
       )
       .toBe(true);
     await page.reload();
-    await expect(page.getByRole("button", { name: "Start game" })).toBeVisible();
+    // Someone who has played before lands in a fresh game, not the abandoned one.
+    await expect(moves(page)).toHaveAttribute("data-count", "0");
+    await expect(page.getByRole("button", { name: "Start game" })).toBeHidden();
   });
 });
 

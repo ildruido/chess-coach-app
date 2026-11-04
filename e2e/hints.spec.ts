@@ -154,10 +154,9 @@ test.describe("hints", () => {
     await page.locator("#practice-new").click();
     await expect(setup.getByLabel("Ask me")).toBeChecked();
     await page.reload();
-    await expect(page.locator("#practice-save")).toHaveText(
-      "Games are saved to your account as you play.",
-    );
-    await expect(setup.getByLabel("Ask me")).toBeChecked();
+    // A returning player lands in a fresh game that keeps the last choices.
+    await expect(page.locator("#practice-info")).toContainText("Hints: Ask me");
+    await expect(page.locator("#practice-moves")).toHaveAttribute("data-count", "0");
   });
 
   test("a hint that gives the move away too early is not shown", async ({ page, hasTouch }) => {

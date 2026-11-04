@@ -29,6 +29,26 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 /** The last hint mode a game started with: the next game's setup starts from it. */
 const MODE_KEY = "chess-coach.hint-mode";
 
+/** The setup the last game started with (level, colour, hints): the next visit opens straight into a game. */
+const SETUP_KEY = "chess-coach.practice-setup";
+interface RememberedSetup {
+  level: number;
+  color: ColorChoice;
+  hints: HintMode;
+}
+
+function readSetup(): RememberedSetup | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(SETUP_KEY) ?? "null") as Partial<RememberedSetup>;
+    const level = Number(v?.level);
+    if (!LEVELS.some((l) => l.id === level)) return null;
+    const color = v?.color === "black" || v?.color === "random" ? v.color : "white";
+    return { level, color, hints: v?.hints === "ask" ? "ask" : "tell" };
+  } catch {
+    return null;
+  }
+}
+
 /** Shows `mode` in the setup and remembers it for the next game on this device. */
 function rememberHintMode(setup: HTMLFormElement, mode: HintMode) {
   for (const i of setup.querySelectorAll<HTMLInputElement>('input[name="practice-hint-mode"]')) {
@@ -85,6 +105,15 @@ export function mountPracticePanel(engine: StockfishEngine) {
   // Always set, so a browser restoring the form can't show an unstarted choice.
   for (const i of setup.querySelectorAll<HTMLInputElement>('input[name="practice-hint-mode"]')) {
     i.checked = i.value === lastSet;
+  }
+
+  const remembered = readSetup();
+  if (remembered) {
+    levelSelect.value = String(remembered.level);
+    showBlurb();
+    for (const i of setup.querySelectorAll<HTMLInputElement>('input[name="practice-color"]')) {
+      i.checked = i.value === remembered.color;
+    }
   }
 
   /** Ale's move, dragged on the board or confirmed by voice. False when it isn't allowed. */
@@ -224,12 +253,22 @@ export function mountPracticePanel(engine: StockfishEngine) {
     }
   }
 
-  setup.addEventListener("submit", (e) => {
-    e.preventDefault();
+  /** Starts a game from what the setup shows; remembers it so the next visit needs no click. */
+  function startGame(focusBoard: boolean) {
     const form = new FormData(setup);
     const choice = (form.get("practice-color") ?? "white") as ColorChoice;
     const hintMode: HintMode = form.get("practice-hint-mode") === "ask" ? "ask" : "tell";
     rememberHintMode(setup, hintMode);
+    try {
+      const setupNow: RememberedSetup = {
+        level: Number(levelSelect.value),
+        color: choice,
+        hints: hintMode,
+      };
+      localStorage.setItem(SETUP_KEY, JSON.stringify(setupNow));
+    } catch {
+      // Only a convenience: the next visit then shows the setup.
+    }
     generation++;
     thinking = false;
     engineError = null;
@@ -238,6 +277,13 @@ export function mountPracticePanel(engine: StockfishEngine) {
     render();
     persist();
     void engineTurn();
+    // The Start button is gone: keep the reading position on the board.
+    if (focusBoard) $("practice-board").focus();
+  }
+
+  setup.addEventListener("submit", (e) => {
+    e.preventDefault();
+    startGame(true);
   });
 
   takeBackBtn.addEventListener("click", () => {
@@ -263,7 +309,8 @@ export function mountPracticePanel(engine: StockfishEngine) {
 
   newBtn.addEventListener("click", () => {
     stopReading();
-    // Leaving an unfinished game counts as resigning it, so a reload won't bring it back.
+    // Leaving a game counts as resigning it, so a reload won't bring it back. One with no move
+    // of yours yet never reaches Past games (practiceSubject is null until you move).
     if (practice && !practice.isOver) {
       practice.resign();
       persist();
@@ -273,6 +320,7 @@ export function mountPracticePanel(engine: StockfishEngine) {
     engineError = null;
     practice = null;
     render();
+    levelSelect.focus();
   });
 
   retryBtn.addEventListener("click", () => void engineTurn());
@@ -307,5 +355,7 @@ export function mountPracticePanel(engine: StockfishEngine) {
     } catch (err) {
       saveNote.textContent = loadErrorText(err);
     }
+    // A player who has set up a game before lands straight in a new one.
+    if (!practice && readSetup()) startGame(false);
   })();
 }

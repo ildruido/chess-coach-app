@@ -46,13 +46,20 @@ const LEDE: Record<"practice" | "lessons", [string, string]> = {
     "Short lessons on the board: the coach explains an idea, then you practise it. The engine warns you before a move that loses something.",
   ],
 };
-function showScreen(name: "practice" | "lessons") {
+function showScreen(name: "practice" | "lessons", moveFocus = false) {
   stopReading();
   $("practice-screen").hidden = name !== "practice";
   $("lessons-screen").hidden = name !== "lessons";
   $("screen-practice").setAttribute("aria-pressed", String(name === "practice"));
   $("screen-lessons").setAttribute("aria-pressed", String(name === "lessons"));
+  for (const n of ["practice", "lessons"] as const) {
+    if (n === name) $(`screen-${n}`).setAttribute("aria-current", "page");
+    else $(`screen-${n}`).removeAttribute("aria-current");
+  }
   $("page-title").textContent = LEDE[name][0];
+  document.title = `${LEDE[name][0]} · Chess Coach`;
+  // A tap on the other screen moves the reading position to its heading.
+  if (moveFocus) $("page-title").focus();
   $("page-lede").textContent = LEDE[name][1];
   if (name === "lessons") void lessons.show();
   try {
@@ -61,8 +68,8 @@ function showScreen(name: "practice" | "lessons") {
     // Only a convenience.
   }
 }
-$("screen-practice").addEventListener("click", () => showScreen("practice"));
-$("screen-lessons").addEventListener("click", () => showScreen("lessons"));
+$("screen-practice").addEventListener("click", () => showScreen("practice", true));
+$("screen-lessons").addEventListener("click", () => showScreen("lessons", true));
 let lastScreen: string | null = null;
 try {
   lastScreen = localStorage.getItem(SCREEN_KEY);

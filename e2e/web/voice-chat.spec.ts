@@ -91,6 +91,19 @@ test.describe("voice chat", () => {
     expect(await log(page)).toEqual([]);
   });
 
+  test("the Voice chat button by the board starts and stops listening in one tap", async ({
+    page,
+  }) => {
+    await setup(page);
+    const quick = page.locator("#voice-quick");
+    await expect(quick).toHaveAttribute("aria-pressed", "false");
+    await quick.click();
+    await expect(page.locator("#voice-chat-toggle")).toBeChecked();
+    await expect(quick).toHaveAttribute("aria-pressed", "true");
+    await quick.click();
+    await expect(page.locator("#voice-chat-toggle")).not.toBeChecked();
+  });
+
   test("a spoken question is answered aloud, then it listens again", async ({ page }) => {
     await setup(page);
     await saySoon(page, "why is the centre important");

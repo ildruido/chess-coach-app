@@ -9,7 +9,7 @@ test.describe("page", () => {
   });
 
   test("shows Practice, with a version and a title", async ({ page }) => {
-    await expect(page).toHaveTitle("Chess Coach");
+    await expect(page).toHaveTitle(/Chess Coach/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Practice");
     await expect(page.getByRole("button", { name: "Start game" })).toBeVisible();
     await expect(page.getByText(/^v\d+\.\d+\.\d+$/)).toBeVisible();

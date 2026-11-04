@@ -8,6 +8,7 @@ import "@lichess-org/chessground/assets/chessground.cburnett.css";
 import type { Api } from "@lichess-org/chessground/api";
 import type { Key } from "@lichess-org/chessground/types";
 import type { Color, GameState, PromotionPiece } from "../game/game-state";
+import { announceMove, describeBoard, parseTypedMove } from "./board-a11y";
 
 export interface BoardOptions {
   /** Which colors the person may move: both for pass-and-play, one against the engine. */
@@ -64,6 +65,97 @@ export class BoardView {
     this.layoutObserver.observe(document.body);
     this.layoutObserver.observe(boardEl);
     void document.fonts?.ready.then(remeasure);
+    this.mountTools();
+  }
+
+  // Keyboard and screen-reader access (CC-074): the board itself can only be dragged or tapped,
+  // so under it sit a box to type a move, a spoken-style readout, and a live line that says
+  // every move in words.
+  private announceEl!: HTMLElement;
+  private typedStatus!: HTMLElement;
+  private typedInput!: HTMLInputElement;
+  private readoutEl!: HTMLElement;
+  private prevFen: string | null = null;
+  private prevPly = 0;
+
+  private mountTools() {
+    const id = this.boardEl.id;
+    const tools = document.createElement("div");
+    tools.className = "board-tools";
+    tools.innerHTML = `
+      <div class="sr-only" id="${id}-announce" role="status" aria-live="polite" aria-atomic="true"></div>
+      <form id="${id}-typed-form" autocomplete="off">
+        <div class="field">
+          <label for="${id}-typed">Type a move</label>
+          <input id="${id}-typed" type="text" inputmode="text" enterkeyhint="go"
+            autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="12"
+            aria-describedby="${id}-typed-hint ${id}-typed-status" />
+        </div>
+        <button type="submit" class="secondary">Move</button>
+        <button type="button" class="secondary" id="${id}-read">Read the board</button>
+      </form>
+      <p id="${id}-typed-hint" class="mode-note">For example e4, Nf3, O-O or e2e4.</p>
+      <p id="${id}-typed-status" class="status" role="status"></p>
+      <p id="${id}-readout" class="board-readout" tabindex="-1" hidden></p>`;
+    (this.boardEl.closest(".board-wrap") ?? this.boardEl).after(tools);
+    const q = <T extends HTMLElement>(suffix: string) =>
+      tools.querySelector<T>(`#${id}-${suffix}`)!;
+    this.announceEl = q("announce");
+    this.typedStatus = q("typed-status");
+    this.typedInput = q<HTMLInputElement>("typed");
+    const readout = q("readout");
+    this.readoutEl = readout;
+    q("typed-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      this.submitTyped();
+    });
+    q("read").addEventListener("click", () => {
+      readout.textContent = this.currentGame
+        ? describeBoard(this.currentGame.fen)
+        : "There is no board to read yet.";
+      readout.hidden = false;
+      readout.focus();
+    });
+  }
+
+  /** Says `text` through the live region (a repeated line is still read out again). */
+  announce(text: string) {
+    this.announceEl.textContent = "";
+    requestAnimationFrame(() => (this.announceEl.textContent = text));
+  }
+
+  private typedMessage(text: string) {
+    this.typedStatus.textContent = text;
+  }
+
+  private submitTyped() {
+    const game = this.currentGame;
+    const text = this.typedInput.value;
+    if (!game) return this.typedMessage("There is no game to move in yet.");
+    const who = this.options.movable();
+    const mine = who === "both" || who === game.turn;
+    if (!mine) {
+      // A quiz asks for a square: typing one answers it, like tapping.
+      const square = text.trim().toLowerCase();
+      if (this.options.onSelect && /^[a-h][1-8]$/.test(square)) {
+        this.typedInput.value = "";
+        this.typedMessage("");
+        this.options.onSelect(square);
+        return;
+      }
+      return this.typedMessage(
+        this.options.onSelect
+          ? "Type the square you choose, for example e4."
+          : "It isn't your move right now.",
+      );
+    }
+    const r = parseTypedMove(game.fen, text);
+    if (!r.ok) return this.typedMessage(r.reason);
+    const { from, to, promotion } = r.move;
+    this.typedInput.value = "";
+    this.typedMessage("");
+    if (game.isPromotion(from, to) && !promotion) return this.askPromotion(from, to);
+    this.options.onMove(from, to, promotion);
   }
 
   private readonly layoutObserver: ResizeObserver;
@@ -85,6 +177,16 @@ export class BoardView {
       },
     });
     this.currentGame = game;
+    this.readoutEl.hidden = true; // its text would be stale after a move
+    // Every move, yours or the engine's, is said once in words.
+    const ply = game.moves.length;
+    const last = game.lastMove;
+    if (this.prevFen && this.prevFen !== game.fen && ply === this.prevPly + 1 && last) {
+      const text = announceMove(this.prevFen, game.fen, last[0], last[1]);
+      if (text) this.announce(text);
+    }
+    this.prevFen = game.fen;
+    this.prevPly = ply;
   }
 
   /** Draws lesson arrows and marked squares; called with nothing, clears them. */

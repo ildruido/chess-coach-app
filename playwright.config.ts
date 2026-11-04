@@ -11,7 +11,7 @@ const WEB = "http://localhost:4175";
  * else behaves the same at any screen size, so it runs on desktop only (Ale approved, 2026-10-09).
  */
 const PHONE =
-  /(^|[\\/])(layout|practice-board|practice|lessons|lesson-list|tactics-lessons|opening-mate-lessons|play-out)\.spec\.ts$/;
+  /(^|[\\/])(layout|a11y|practice-board|practice|lessons|lesson-list|tactics-lessons|opening-mate-lessons|play-out)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: "e2e",

@@ -280,6 +280,10 @@ export function mountLessonVoice(host: LessonVoiceHost) {
           chatState.textContent = STATE_TEXT[state];
           chatState.hidden = state === "off";
           chatToggle.checked = state !== "off";
+          $<HTMLButtonElement>("lesson-voice-quick").setAttribute(
+            "aria-pressed",
+            String(state !== "off"),
+          );
           micBtn.disabled = state !== "off";
         },
         onStopped: (text) => setStatus(text, "warn"),
@@ -287,6 +291,16 @@ export function mountLessonVoice(host: LessonVoiceHost) {
     : null;
   if (handsFree) {
     chatLabel.hidden = false;
+    // One tap from the board: the same switch, near the moves (CC-074).
+    const quick = $<HTMLButtonElement>("lesson-voice-quick");
+    quick.hidden = false;
+    quick.addEventListener("click", () => {
+      chatToggle.checked = !chatToggle.checked;
+      chatToggle.dispatchEvent(new Event("change"));
+    });
+    chatToggle.addEventListener("change", () => {
+      quick.setAttribute("aria-pressed", String(chatToggle.checked));
+    });
     chatToggle.addEventListener("change", () => {
       if (!chatToggle.checked) return handsFree.stop();
       // A tap: lets the phone listen and speak for the rest of the chat.

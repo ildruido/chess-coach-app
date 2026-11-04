@@ -1,6 +1,6 @@
 {
   "name": "chess-coach",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "private": true,
   "description": "Chess Coach: play chess with a Claude instructor that explains what the engine finds.",
   "type": "module",
@@ -28,6 +28,7 @@
     "verify:puzzles": "vitest run --config vitest.engine.config.ts"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/node": "^22.20.5",
