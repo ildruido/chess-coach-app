@@ -333,6 +333,9 @@ describe.skipIf(!url)("sign-in", () => {
           "INSERT INTO documents (path, parent, id, data) VALUES ($1, $2, 'g', '{}')",
           [`data/users/${u}/current-game`, `data/users/${u}`],
         );
+        await pool.query("INSERT INTO ai_usage (user_id, month, tokens) VALUES ($1, now(), 5)", [
+          u,
+        ]);
         await pool.query("INSERT INTO coach_usage (user_id, month, tokens) VALUES ($1, now(), 5)", [
           u,
         ]);
@@ -342,6 +345,9 @@ describe.skipIf(!url)("sign-in", () => {
       expect(
         (await pool.query("SELECT 1 FROM documents WHERE path LIKE $1", [`%${id}%`])).rowCount,
       ).toBe(0);
+      expect((await pool.query("SELECT 1 FROM ai_usage WHERE user_id = $1", [id])).rowCount).toBe(
+        0,
+      );
       expect(
         (await pool.query("SELECT 1 FROM coach_usage WHERE user_id = $1", [id])).rowCount,
       ).toBe(0);

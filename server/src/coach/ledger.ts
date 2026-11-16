@@ -11,7 +11,7 @@ export function resetsAt(now: Date): string {
 }
 
 export async function getUsed(pool: pg.Pool, userId: string, now: Date): Promise<number> {
-  const r = await pool.query("SELECT tokens FROM coach_usage WHERE user_id = $1 AND month = $2", [
+  const r = await pool.query("SELECT tokens FROM ai_usage WHERE user_id = $1 AND month = $2", [
     userId,
     monthStart(now),
   ]);
@@ -25,10 +25,18 @@ export async function addUsage(
   now: Date,
 ): Promise<void> {
   if (!(tokens > 0)) return;
+  const args = [userId, monthStart(now), Math.round(tokens)];
+  await pool.query(
+    `INSERT INTO ai_usage (user_id, month, tokens) VALUES ($1, $2, $3)
+     ON CONFLICT (user_id, month) DO UPDATE SET tokens = ai_usage.tokens + EXCLUDED.tokens`,
+    args,
+  );
+  // Transition (migration 004): keep the old table current too, so rolling back a deploy
+  // never shows players a stale, lower count. Remove with the drop of coach_usage.
   await pool.query(
     `INSERT INTO coach_usage (user_id, month, tokens) VALUES ($1, $2, $3)
      ON CONFLICT (user_id, month) DO UPDATE SET tokens = coach_usage.tokens + EXCLUDED.tokens`,
-    [userId, monthStart(now), Math.round(tokens)],
+    args,
   );
 }
 

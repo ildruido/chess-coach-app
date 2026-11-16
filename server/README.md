@@ -30,7 +30,7 @@ The page that opens `#/invite/<token>` and posts to `/api/auth/signup` is `src/w
 
 ## Coach
 
-`POST /api/coach` streams the coach's answer (`docs/API.md`). Set `ANTHROPIC_API_KEY` on the server only; without it `/api/coach` answers `503 capability_removed`. `COACH_MODEL_QUICK` (default `claude-haiku-4-5`) and `COACH_MODEL_DEFAULT` (default `claude-sonnet-4-5`) pick the models, `COACH_DEFAULT_ALLOWANCE` (default 200000) is the monthly token allowance for anyone the admin has not set one for. Tokens are counted per person per UTC month in `coach_usage`; prompts and answers are never logged. The allowance and the two-calls-at-once cap are checked in this process, so (like sign-in limits) run one server instance.
+`POST /api/coach` streams the coach's answer (`docs/API.md`). Set `ANTHROPIC_API_KEY` on the server only; without it `/api/coach` answers `503 capability_removed`. `COACH_MODEL_QUICK` (default `claude-haiku-4-5`) and `COACH_MODEL_DEFAULT` (default `claude-sonnet-4-5`) pick the models, `COACH_DEFAULT_ALLOWANCE` (default 200000) is the monthly token allowance for anyone the admin has not set one for. Tokens are counted per person per UTC month in `ai_usage`; prompts and answers are never logged. The allowance and the two-calls-at-once cap are checked in this process, so (like sign-in limits) run one server instance.
 
 ## The web app, headers and limits
 

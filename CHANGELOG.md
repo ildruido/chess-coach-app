@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.27.1] - 2026-11-16
+
+### Changed
+
+- Behind the scenes: the table that counts each player's monthly coach usage gets the name `ai_usage` (all existing usage is copied over, so nobody's allowance resets; the old table stays as a safety net). Prepares the move to the shared harness. (Refs: harness migration)
+
 ## [0.27.0] - 2026-11-05
 
 ### Added
@@ -336,7 +342,8 @@ Web app only: the Claude app and the Lab are retired.
 - Hello page with an "Ask Claude" button that asks the coach a question through the artifact `sample` capability.
 - The status line says whether Claude access is already allowed, instead of always promising a permission prompt.
 
-[Unreleased]: https://github.com/ildruido/chess-coach/compare/v0.25.3...HEAD
+[Unreleased]: https://github.com/ildruido/chess-coach/compare/v0.27.1...HEAD
+[0.27.1]: https://github.com/ildruido/chess-coach/compare/v0.27.0...v0.27.1
 [0.25.3]: https://github.com/ildruido/chess-coach/compare/v0.25.2...v0.25.3
 [0.25.2]: https://github.com/ildruido/chess-coach/compare/v0.25.1...v0.25.2
 [0.25.1]: https://github.com/ildruido/chess-coach/compare/v0.25.0...v0.25.1

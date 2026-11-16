@@ -104,8 +104,13 @@ describe.skipIf(!url)("coach endpoint", () => {
     });
   });
 
+  it("keeps the old coach_usage table in step, for a safe rollback", async () => {
+    const r = await pool.query("SELECT tokens FROM coach_usage WHERE user_id = 'u1'");
+    expect(Number(r.rows[0].tokens)).toBe(25);
+  });
+
   it("refuses before calling upstream once the allowance is used", async () => {
-    await pool.query("UPDATE coach_usage SET tokens = 100 WHERE user_id = 'u1'");
+    await pool.query("UPDATE ai_usage SET tokens = 100 WHERE user_id = 'u1'");
     const before = calls;
     const r = await post();
     expect(r.status).toBe(429);

@@ -231,6 +231,8 @@ export async function deleteUser(pool: pg.Pool, email: string): Promise<boolean>
     const id: string = r.rows[0].id;
     // Ids are generated UUIDs, so they hold no LIKE wildcards.
     await client.query("DELETE FROM documents WHERE path LIKE $1", [`data/users/${id}/%`]);
+    await client.query("DELETE FROM ai_usage WHERE user_id = $1", [id]);
+    // Transition (migration 004): the old table is kept in step until it is dropped.
     await client.query("DELETE FROM coach_usage WHERE user_id = $1", [id]);
     await client.query("COMMIT");
     return true;
